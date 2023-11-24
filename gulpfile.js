@@ -1,43 +1,47 @@
-const path = require('path')
-const gulp = require("gulp");
-const sass = require("gulp-sass")(require("sass"));
-const edge = import('edge.js');
+import path from 'path';
+import gulp from 'gulp';
+import sass from 'sass';
+import ejs from 'ejs';
+import rename from 'gulp-rename';
+import tap from 'gulp-tap';
+import fs from 'fs';
+import htmlmin from 'gulp-htmlmin';
 
-// Edge.jsのテンプレートファイルのパス
-const edgeTemplatesPath = '/test/gulp/edge';
+// Sass -> CSS
+function styles() {
+  return gulp.src('src/css/**/*.scss')
+    .pipe(tap(file => {
+      const contents = sass.renderSync({ file: file.path, outputStyle: 'expanded' }).css;
+      file.contents = Buffer.from(contents);
+    }))
+    .pipe(rename({ extname: '.css' }))
+    .pipe(gulp.dest('dist/css'));
+}
 
-// Edge.jsのコンパイルタスク
-gulp.task("edge", function() {
-  edge.configure({ 
-    // Edge.jsの設定（必要に応じて）
-  });
+// EJS テンプレート -> HTML
+function templates() {
+  const data = fs.existsSync('src/template/data.json')
+    ? JSON.parse(fs.readFileSync('src/template/data.json', 'utf8'))
+    : {};
 
-  return gulp
-    .src(`${edgeTemplatesPath}/**/*.edge`)
-    .pipe(edge()) // Edge.jsのコンパイルを実行
-    .pipe(gulp.dest('dist')); // コンパイル結果を保存するディレクトリ
-});
+  fs.existsSync('src/template/helpers.js') && require('./src/template/helpers.js');
 
-// Sassのコンパイルタスク
-gulp.task("styles", function() {
-  return gulp
-    .src("css/style.scss")
-    .pipe(
-      sass({
-        outputStyle: "compressed"
-      })
-    )
-    .pipe(gulp.dest("dist"));
-});
+  return gulp.src('src/template/**/*.ejs')
+    .pipe(tap(file => {
+      const contents = ejs.render(String(file.contents), data);
+      file.contents = Buffer.from(contents);
+    }))
+    .pipe(rename({ extname: '.html' }))
+    .pipe(htmlmin({ collapseWhitespace: true })) // HTML ミニファイ
+    .pipe(gulp.dest('dist'));
+}
 
-// ウォッチャータスク
-gulp.task("watch", function() {
-  gulp.watch("css/style.scss", gulp.series("styles"));
-  gulp.watch(`${edgeTemplatesPath}/**/*.edge`, gulp.series("edge"));
-});
+// タスク登録
+gulp.task('styles', styles);
+gulp.task('templates', templates);
 
-// "dev" タスクを追加
-gulp.task("dev", gulp.series("styles", "edge", "watch"));
+// dev タスク
+gulp.task('dev', gulp.series('styles', 'templates'));
 
 // デフォルトタスク
-gulp.task("default", gulp.series("styles", "edge", "watch"));
+gulp.task('default', gulp.series('styles', 'templates'));
