@@ -1,0 +1,1 @@
+# gulpとedge.jsテスト
